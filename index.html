@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Big Bang Countdown</title>
+    <style>
+        /* CSS 部分：宇宙風格設計 */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050510;
+            color: #fff;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden; /* 防止滾動條影響動畫 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+            backdrop-filter: blur(5px);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            color: #00d4ff;
+            text-shadow: 0 0 10px #00d4ff;
+        }
+
+        .inputs {
+            margin-bottom: 1.5rem;
+        }
+
+        input {
+            width: 60px;
+            padding: 10px;
+            font-size: 1.2rem;
+            border: 1px solid #00d4ff;
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            border-radius: 5px;
+            text-align: center;
+            margin: 0 5px;
+        }
+
+        .display {
+            font-size: 5rem;
+            font-weight: bold;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 1.5rem 0;
+            color: #fff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+
+        button {
+            padding: 10px 30px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            background: transparent;
+            color: #00d4ff;
+            border: 2px solid #00d4ff;
+            border-radius: 50px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #00d4ff;
+            color: #000;
+            box-shadow: 0 0 20px #00d4ff;
+        }
+
+        button:disabled {
+            border-color: #555;
+            color: #555;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <div class="container">
+        <h1>Cosmic Timer</h1>
+        
+        <div class="inputs" id="input-area">
+            <input type="number" id="hr" placeholder="時" min="0" max="23">
+            <input type="number" id="min" placeholder="分" min="0" max="59">
+            <input type="number" id="sec" placeholder="秒" min="0" max="59">
+        </div>
+
+        <div class="display" id="timer-display">00:00:00</div>
+
+        <div class="controls">
+            <button id="start-btn">啟動大爆炸倒數</button>
+            <button id="reset-btn" style="display:none;">重設</button>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript 部分：邏輯與爆炸特效
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        const display = document.getElementById('timer-display');
+        const startBtn = document.getElementById('start-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const inputArea = document.getElementById('input-area');
+
+        let countdownInterval;
+        let particles = [];
+        let isExploding = false;
+
+        // 調整視窗大小
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 粒子類別 (用於背景星空與爆炸)
+        class Particle {
+            constructor(x, y, color, speed, size) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = size;
+                this.speedX = (Math.random() - 0.5) * speed;
+                this.speedY = (Math.random() - 0.5) * speed;
+                this.opacity = 1;
+                this.life = 1; // 壽命
+            }
+
+            draw() {
+                ctx.globalAlpha = this.opacity;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (isExploding) {
+                    this.opacity -= 0.005;
+                    this.life -= 0.005;
+                }
+            }
+        }
+
+        // 初始化星空背景
+        function initStars() {
+            for (let i = 0; i < 150; i++) {
+                particles.push(new Particle(
+                    Math.random() * canvas.width,
+                    Math.random() * canvas.height,
+                    '#ffffff',
+                    0.2,
+                    Math.random() * 2
+                ));
+            }
+        }
+        initStars();
+
+        // 大爆炸特效函式
+        function createBigBang() {
+            isExploding = true;
+            particles = []; // 清空星空，準備大爆炸
+            const colors = ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#4b0082', '#9400d3', '#ffffff', '#00d4ff'];
+            
+            for (let i = 0; i < 800; i++) {
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                particles.push(new Particle(
+                    canvas.width / 2,
+                    canvas.height / 2,
+                    color,
+                    Math.random() * 25,
+                    Math.random() * 4 + 1
+                ));
+            }
+        }
+
+        // 動畫主迴圈
+        function animate() {
+            ctx.fillStyle = 'rgba(5, 5, 16, 0.2)'; // 拖尾效果
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach((p, index) => {
+                p.update();
+                p.draw();
+                if (p.life <= 0) particles.splice(index, 1);
+            });
+
+            if (isExploding && particles.length === 0) {
+                isExploding = false;
+                initStars(); // 爆炸結束後重回星空
+            }
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // 倒數計時邏輯
+        startBtn.addEventListener('click', () => {
+            let h = parseInt(document.getElementById('hr').value) || 0;
+            let m = parseInt(document.getElementById('min').value) || 0;
+            let s = parseInt(document.getElementById('sec').value) || 0;
+
+            let totalSeconds = h * 3600 + m * 60 + s;
+
+            if (totalSeconds <= 0) return alert("請設定時間！");
+
+            startBtn.disabled = true;
+            inputArea.style.opacity = '0.3';
+
+            countdownInterval = setInterval(() => {
+                totalSeconds--;
+
+                const displayH = Math.floor(totalSeconds / 3600);
+                const displayM = Math.floor((totalSeconds % 3600) / 60);
+                const displayS = totalSeconds % 60;
+
+                display.innerText = 
+                    `${String(displayH).padStart(2, '0')}:${String(displayM).padStart(2, '0')}:${String(displayS).padStart(2, '0')}`;
+
+                if (totalSeconds <= 0) {
+                    clearInterval(countdownInterval);
+                    createBigBang(); // 觸發爆炸
+                    display.innerText = "BIG BANG!";
+                    display.style.color = "#ff4500";
+                    startBtn.style.display = "none";
+                    resetBtn.style.display = "inline-block";
+                }
+            }, 1000);
+        });
+
+        resetBtn.addEventListener('click', () => {
+            location.reload(); // 簡單重置
+        });
+    </script>
+</body>
+</html>
