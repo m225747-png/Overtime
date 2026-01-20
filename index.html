@@ -2,272 +2,181 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MacGyver Tactical Countdown</title>
+    <title>City Defender - 城市保衛戰</title>
     <style>
-        :root {
-            --mac-red: #c62828;
-            --mac-gold: #fbc02d;
-            --lcd-green: #2ecc71;
-            --panel-gray: #1a1a1a;
-        }
-
         body {
             margin: 0;
-            padding: 0;
-            background-color: #0a0a0a;
-            color: #eee;
-            font-family: 'Courier New', Courier, monospace;
+            background: #050510;
             overflow: hidden;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             height: 100vh;
-        }
-
-        #bg-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: -1;
-        }
-
-        /* 模擬工具箱/炸彈面板的容器 */
-        .container {
-            text-align: center;
-            background: var(--panel-gray);
-            padding: 3rem;
-            border: 4px solid #333;
-            border-radius: 10px;
-            box-shadow: inset 0 0 50px #000, 0 20px 50px rgba(0,0,0,0.8);
-            position: relative;
-            max-width: 500px;
-            width: 90%;
-        }
-
-        /* 裝飾用的「膠帶」 */
-        .duct-tape {
-            position: absolute;
-            background: #888;
-            height: 40px;
-            width: 120px;
-            opacity: 0.6;
-            transform: rotate(-30deg);
-            top: -15px;
-            left: -30px;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
-            border-left: 2px dashed #666;
-            border-right: 2px dashed #666;
-        }
-
-        h1 {
-            font-size: 1.5rem;
-            margin-bottom: 2rem;
-            color: var(--mac-gold);
-            text-transform: uppercase;
-            letter-spacing: 3px;
-            border-bottom: 2px solid var(--mac-red);
-            padding-bottom: 10px;
-        }
-
-        .inputs input {
-            width: 70px;
-            padding: 10px;
-            font-size: 1.5rem;
-            border: 2px solid #444;
-            background: #000;
-            color: var(--lcd-green);
-            border-radius: 4px;
-            text-align: center;
-            font-family: 'Digital-7', monospace; /* 如果有數位字體更好 */
-        }
-
-        /* 經典 LCD 倒數顯示器 */
-        .display {
-            font-size: 6rem;
-            font-weight: bold;
-            margin: 2rem 0;
-            color: #ff3300; /* 經典紅色 LED */
-            text-shadow: 0 0 15px rgba(255, 51, 0, 0.7);
-            background: #050000;
-            padding: 20px;
-            border-radius: 8px;
-            border: 5px solid #222;
-        }
-
-        .controls button {
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            cursor: pointer;
-            background: var(--mac-red);
             color: white;
-            border: none;
-            border-bottom: 4px solid #800;
-            border-radius: 5px;
-            transition: 0.1s;
-            text-transform: uppercase;
-            font-weight: bold;
+            font-family: Arial, sans-serif;
         }
-
-        .controls button:active {
-            transform: translateY(4px);
-            border-bottom: none;
+        canvas {
+            border: 4px solid #333;
+            background: linear-gradient(to bottom, #001f3f 0%, #000000 100%);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
-
-        .controls button:disabled {
-            background: #444;
-            border-bottom: none;
-            cursor: not-allowed;
-        }
-
-        #reset-btn {
-            background: var(--mac-gold);
-            color: black;
-            border-bottom: 4px solid #c79100;
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-    <canvas id="bg-canvas"></canvas>
-
-    <div class="container">
-        <div class="duct-tape"></div>
-        <h1>Phoenix Foundation Device</h1>
-        
-        <div class="inputs" id="input-area">
-            <input type="number" id="hr" placeholder="00" min="0">
-            <input type="number" id="min" placeholder="00" min="0">
-            <input type="number" id="sec" placeholder="00" min="0">
-        </div>
-
-        <div class="display" id="timer-display">00:00:00</div>
-
-        <div class="controls">
-            <button id="start-btn">啟動裝置</button>
-            <button id="reset-btn" style="display:none;">拆解完成 (重置)</button>
-        </div>
+    <div id="ui">
+        <h2 id="score">分數: 0</h2>
+        <p>控制：左右方向鍵移動，空白鍵射擊</p>
     </div>
+    <canvas id="gameCanvas"></canvas>
 
-    <script>
-        const canvas = document.getElementById('bg-canvas');
-        const ctx = canvas.getContext('2d');
-        const display = document.getElementById('timer-display');
-        const startBtn = document.getElementById('start-btn');
-        const resetBtn = document.getElementById('reset-btn');
-        const inputArea = document.getElementById('input-area');
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
 
-        let countdownInterval;
-        let particles = [];
-        let isExploding = false;
+    canvas.width = 600;
+    canvas.height = 800;
 
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
+    // 遊戲狀態
+    let score = 0;
+    let gameOver = false;
 
-        class Particle {
-            constructor(x, y, color, speed, size) {
-                this.x = x;
-                this.y = y;
-                this.color = color;
-                this.size = size;
-                this.speedX = (Math.random() - 0.5) * speed;
-                this.speedY = (Math.random() - 0.5) * speed;
-                this.gravity = 0.1; // 加入重力感
-                this.opacity = 1;
-                this.life = 1;
-            }
+    // 玩家設定
+    const player = {
+        x: canvas.width / 2 - 25,
+        y: canvas.height - 60,
+        w: 50,
+        h: 30,
+        speed: 7,
+        color: '#00d4ff'
+    };
 
-            draw() {
-                ctx.globalAlpha = this.opacity;
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.rect(this.x, this.y, this.size, this.size); // 方形碎片感
-                ctx.fill();
-            }
+    // 陣列存儲
+    let bullets = [];
+    let enemies = [];
+    let buildings = [];
 
-            update() {
-                this.speedY += this.gravity;
-                this.x += this.speedX;
-                this.y += this.speedY;
-                this.opacity -= 0.01;
-                this.life -= 0.01;
-            }
-        }
-
-        // 模擬火花動畫
-        function animate() {
-            ctx.fillStyle = 'rgba(10, 10, 10, 0.3)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            particles.forEach((p, index) => {
-                p.update();
-                p.draw();
-                if (p.life <= 0) particles.splice(index, 1);
+    // 初始化城市背景剪影
+    function initBuildings() {
+        for (let i = 0; i < 10; i++) {
+            buildings.push({
+                x: i * 70,
+                w: 60 + Math.random() * 40,
+                h: 100 + Math.random() * 200,
+                color: '#0a0a1a'
             });
-
-            requestAnimationFrame(animate);
         }
-        animate();
+    }
 
-        function createExplosion() {
-            isExploding = true;
-            // 經典火藥爆炸色：紅、橙、黃、灰
-            const colors = ['#ff4400', '#ffcc00', '#ffffff', '#555555'];
-            for (let i = 0; i < 500; i++) {
-                particles.push(new Particle(
-                    canvas.width / 2,
-                    canvas.height / 2,
-                    colors[Math.floor(Math.random() * colors.length)],
-                    Math.random() * 20,
-                    Math.random() * 5 + 2
-                ));
+    // 監聽按鍵
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    // 產生敵人
+    function spawnEnemy() {
+        if (Math.random() < 0.03) {
+            enemies.push({
+                x: Math.random() * (canvas.width - 40),
+                y: -50,
+                w: 40,
+                h: 40,
+                speed: 2 + Math.random() * 3,
+                color: '#ff4444'
+            });
+        }
+    }
+
+    function update() {
+        if (gameOver) return;
+
+        // 玩家移動
+        if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+        if (keys['ArrowRight'] && player.x < canvas.width - player.w) player.x += player.speed;
+
+        // 射擊
+        if (keys['Space']) {
+            if (bullets.length === 0 || bullets[bullets.length - 1].y < player.y - 100) {
+                bullets.push({ x: player.x + player.w/2 - 2, y: player.y, w: 4, h: 15, speed: 10 });
             }
         }
 
-        startBtn.addEventListener('click', () => {
-            let h = parseInt(document.getElementById('hr').value) || 0;
-            let m = parseInt(document.getElementById('min').value) || 0;
-            let s = parseInt(document.getElementById('sec').value) || 0;
-            let totalSeconds = h * 3600 + m * 60 + s;
-
-            if (totalSeconds <= 0) return alert("馬蓋先，你得先設定時間！");
-
-            startBtn.disabled = true;
-            inputArea.style.visibility = 'hidden';
-
-            countdownInterval = setInterval(() => {
-                totalSeconds--;
-
-                const displayH = Math.floor(totalSeconds / 3600);
-                const displayM = Math.floor((totalSeconds % 3600) / 60);
-                const displayS = totalSeconds % 60;
-
-                display.innerText = 
-                    `${String(displayH).padStart(2, '0')}:${String(displayM).padStart(2, '0')}:${String(displayS).padStart(2, '0')}`;
-
-                // 倒數最後 5 秒警告色
-                if (totalSeconds <= 5) {
-                    display.style.color = (totalSeconds % 2 === 0) ? "#fff" : "#ff0000";
-                }
-
-                if (totalSeconds <= 0) {
-                    clearInterval(countdownInterval);
-                    createExplosion();
-                    display.innerText = "MISSION FAILED";
-                    display.style.fontSize = "3rem";
-                    startBtn.style.display = "none";
-                    resetBtn.style.display = "inline-block";
-                }
-            }, 1000);
+        // 子彈移動
+        bullets.forEach((b, i) => {
+            b.y -= b.speed;
+            if (b.y < 0) bullets.splice(i, 1);
         });
 
-        resetBtn.addEventListener('click', () => {
-            location.reload();
+        // 敵人移動與碰撞
+        spawnEnemy();
+        enemies.forEach((en, ei) => {
+            en.y += en.speed;
+
+            // 檢查是否漏掉敵人
+            if (en.y > canvas.height) {
+                gameOver = true;
+                alert("城市被摧毀了！最終得分: " + score);
+                location.reload();
+            }
+
+            // 碰撞子彈
+            bullets.forEach((b, bi) => {
+                if (b.x < en.x + en.w && b.x + b.w > en.x && b.y < en.y + en.h && b.y + b.h > en.y) {
+                    enemies.splice(ei, 1);
+                    bullets.splice(bi, 1);
+                    score += 10;
+                    scoreElement.innerText = `分數: ${score}`;
+                }
+            });
         });
-    </script>
+    }
+
+    function draw() {
+        // 清除畫布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 畫建築物 (背景城市)
+        ctx.fillStyle = '#050510';
+        buildings.forEach(b => {
+            ctx.fillRect(b.x, canvas.height - b.h, b.w, b.h);
+            // 窗戶
+            ctx.fillStyle = '#1a1a3a';
+            ctx.fillRect(b.x + 10, canvas.height - b.h + 20, 10, 10);
+        });
+
+        // 畫玩家 (坦克/戰機)
+        ctx.fillStyle = player.color;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+        ctx.fillRect(player.x + player.w/2 - 5, player.y - 10, 10, 10); // 砲台
+
+        // 畫子彈
+        ctx.fillStyle = '#ffff00';
+        bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+        // 畫敵人
+        enemies.forEach(en => {
+            ctx.fillStyle = en.color;
+            ctx.fillRect(en.x, en.y, en.w, en.h);
+            // 敵人裝飾
+            ctx.strokeStyle = 'white';
+            ctx.strokeRect(en.x + 5, en.y + 5, en.w - 10, en.h - 10);
+        });
+
+        requestAnimationFrame(() => {
+            update();
+            draw();
+        });
+    }
+
+    initBuildings();
+    draw();
+</script>
 </body>
 </html>
