@@ -1,36 +1,166 @@
-import random
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>海邊野球拳 - Seaside Janken</title>
+    <style>
+        :root {
+            --primary-blue: #0077be;
+            --accent-gold: #f4d03f;
+        }
 
-def play_game():
-    options = ["剪刀", "石頭", "布"]
-    
-    print("--- 歡迎來到野球拳遊戲！ ---")
-    print("請輸入：剪刀、石頭 或 布（輸入 '離開' 結束遊戲）")
+        body {
+            margin: 0;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(to bottom, #87CEEB, #E0F7FA);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
 
-    while True:
-        # 玩家輸入
-        user_choice = input("\n你的選擇: ").strip()
+        /* 背景：模擬海邊氛圍 */
+        .background-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80') no-repeat center center/cover;
+            z-index: -1;
+            filter: brightness(0.8);
+        }
 
-        if user_choice == "離開":
-            print("遊戲結束，下次再玩！")
-            break
+        .game-container {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.3);
+            width: 90%;
+            max-width: 500px;
+        }
 
-        if user_choice not in options:
-            print("無效的輸入，請重新輸入：剪刀、石頭 或 布。")
-            continue
+        /* 主角展示區 */
+        .model-display {
+            width: 100%;
+            height: 300px;
+            background: #eee;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            border: 3px solid white;
+            position: relative;
+        }
 
-        # 電腦隨機選擇
-        computer_choice = random.choice(options)
-        print(f"電腦出的是: {computer_choice}")
+        .model-display img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
 
-        # 勝負邏輯判定
-        if user_choice == computer_choice:
-            print("結果：平手！再試一次。")
-        elif (user_choice == "石頭" and computer_choice == "剪刀") or \
-             (user_choice == "剪刀" and computer_choice == "布") or \
-             (user_choice == "布" and computer_choice == "石頭"):
-            print("結果：你贏了！太棒了！")
-        else:
-            print("結果：你輸了，再接再厲！")
+        .status-text {
+            color: white;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+            height: 2rem;
+        }
 
-if __name__ == "__main__":
-    play_game()
+        .controls {
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+        }
+
+        button {
+            padding: 15px 25px;
+            font-size: 1.2rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+            color: var(--primary-blue);
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            background: var(--accent-gold);
+            color: black;
+        }
+
+        .score-board {
+            margin-top: 20px;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="background-overlay"></div>
+
+    <div class="game-container">
+        <h2 style="color: white; margin-top: 0;">Seaside Janken</h2>
+        
+        <div class="model-display">
+            <img id="model-img" src="https://images.unsplash.com/photo-1520975661595-6453be3f7070?auto=format&fit=crop&w=800&q=80" alt="Model">
+        </div>
+
+        <div id="status" class="status-text">準備好了嗎？</div>
+
+        <div class="controls">
+            <button onclick="play('石頭')">✊ 石頭</button>
+            <button onclick="play('剪刀')">✌️ 剪刀</button>
+            <button onclick="play('布')">✋ 布</button>
+        </div>
+
+        <div class="score-board">
+            玩家: <span id="user-score">0</span> | AI 模特兒: <span id="ai-score">0</span>
+        </div>
+    </div>
+
+    <script>
+        let userScore = 0;
+        let aiScore = 0;
+        const options = ["石頭", "剪刀", "布"];
+        const statusEl = document.getElementById('status');
+        const modelImg = document.getElementById('model-img');
+
+        function play(userChoice) {
+            const aiChoice = options[Math.floor(Math.random() * 3)];
+            
+            // 晃動效果
+            modelImg.style.transform = "scale(1.1)";
+            setTimeout(() => modelImg.style.transform = "scale(1)", 200);
+
+            if (userChoice === aiChoice) {
+                statusEl.innerText = `雙方都出 ${userChoice}，平手！`;
+            } else if (
+                (userChoice === "石頭" && aiChoice === "剪刀") ||
+                (userChoice === "剪刀" && aiChoice === "布") ||
+                (userChoice === "布" && aiChoice === "石頭")
+            ) {
+                statusEl.innerText = `贏了！模特兒出了 ${aiChoice}`;
+                userScore++;
+                statusEl.style.color = "#FFEB3B";
+            } else {
+                statusEl.innerText = `輸了... 模特兒出了 ${aiChoice}`;
+                aiScore++;
+                statusEl.style.color = "#FF5252";
+            }
+
+            document.getElementById('user-score').innerText = userScore;
+            document.getElementById('ai-score').innerText = aiScore;
+            
+            // 延遲恢復顏色
+            setTimeout(() => { statusEl.style.color = "white"; }, 1000);
+        }
+    </script>
+</body>
+</html>
