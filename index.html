@@ -1,166 +1,167 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>海邊野球拳 - Seaside Janken</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>森林大冒險</title>
     <style>
-        :root {
-            --primary-blue: #0077be;
-            --accent-gold: #f4d03f;
-        }
-
-        body {
-            margin: 0;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background: linear-gradient(to bottom, #87CEEB, #E0F7FA);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* 背景：模擬海邊氛圍 */
-        .background-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80') no-repeat center center/cover;
-            z-index: -1;
-            filter: brightness(0.8);
-        }
-
-        .game-container {
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 30px;
-            text-align: center;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.3);
-            width: 90%;
-            max-width: 500px;
-        }
-
-        /* 主角展示區 */
-        .model-display {
-            width: 100%;
-            height: 300px;
-            background: #eee;
-            border-radius: 15px;
-            margin-bottom: 20px;
-            overflow: hidden;
-            border: 3px solid white;
-            position: relative;
-        }
-
-        .model-display img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: transform 0.3s ease;
-        }
-
-        .status-text {
-            color: white;
-            font-size: 1.5rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            margin-bottom: 20px;
-            height: 2rem;
-        }
-
-        .controls {
-            display: flex;
-            justify-content: space-around;
-            gap: 10px;
-        }
-
-        button {
-            padding: 15px 25px;
-            font-size: 1.2rem;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: white;
-            color: var(--primary-blue);
-            font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        }
-
-        button:hover {
-            transform: translateY(-3px);
-            background: var(--accent-gold);
-            color: black;
-        }
-
-        .score-board {
-            margin-top: 20px;
-            color: white;
-            font-weight: bold;
-        }
+        body { margin: 0; overflow: hidden; background: #222; font-family: Arial, sans-serif; }
+        canvas { display: block; background: #4a7d4a; margin: 0 auto; }
+        .controls { position: fixed; bottom: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; pointer-events: none; }
+        .btn { width: 60px; height: 60px; background: rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-weight: bold; }
+        .d-pad { display: flex; gap: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="background-overlay"></div>
+<canvas id="gameCanvas"></canvas>
 
-    <div class="game-container">
-        <h2 style="color: white; margin-top: 0;">Seaside Janken</h2>
-        
-        <div class="model-display">
-            <img id="model-img" src="https://images.unsplash.com/photo-1520975661595-6453be3f7070?auto=format&fit=crop&w=800&q=80" alt="Model">
-        </div>
-
-        <div id="status" class="status-text">準備好了嗎？</div>
-
-        <div class="controls">
-            <button onclick="play('石頭')">✊ 石頭</button>
-            <button onclick="play('剪刀')">✌️ 剪刀</button>
-            <button onclick="play('布')">✋ 布</button>
-        </div>
-
-        <div class="score-board">
-            玩家: <span id="user-score">0</span> | AI 模特兒: <span id="ai-score">0</span>
-        </div>
+<div class="controls">
+    <div class="d-pad">
+        <div class="btn" id="btnLeft">←</div>
+        <div class="btn" id="btnRight">→</div>
+        <div class="btn" id="btnJump">↑</div>
     </div>
+    <div class="btn" id="btnAttack">投石</div>
+</div>
 
-    <script>
-        let userScore = 0;
-        let aiScore = 0;
-        const options = ["石頭", "剪刀", "布"];
-        const statusEl = document.getElementById('status');
-        const modelImg = document.getElementById('model-img');
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-        function play(userChoice) {
-            const aiChoice = options[Math.floor(Math.random() * 3)];
-            
-            // 晃動效果
-            modelImg.style.transform = "scale(1.1)";
-            setTimeout(() => modelImg.style.transform = "scale(1)", 200);
+// 自動調整畫布大小
+canvas.width = window.innerWidth;
+canvas.height = 300; 
 
-            if (userChoice === aiChoice) {
-                statusEl.innerText = `雙方都出 ${userChoice}，平手！`;
-            } else if (
-                (userChoice === "石頭" && aiChoice === "剪刀") ||
-                (userChoice === "剪刀" && aiChoice === "布") ||
-                (userChoice === "布" && aiChoice === "石頭")
-            ) {
-                statusEl.innerText = `贏了！模特兒出了 ${aiChoice}`;
-                userScore++;
-                statusEl.style.color = "#FFEB3B";
-            } else {
-                statusEl.innerText = `輸了... 模特兒出了 ${aiChoice}`;
-                aiScore++;
-                statusEl.style.color = "#FF5252";
+// 遊戲狀態
+let player = { x: 50, y: 200, w: 30, h: 40, dy: 0, speed: 4, jumping: false, ground: 200 };
+let stones = [];
+let enemies = [
+    { x: 400, y: 210, w: 30, h: 20, type: 'snake', speed: 2 },
+    { x: 800, y: 190, w: 40, h: 40, type: 'tiger', speed: 3 }
+];
+let castle = { x: 1500, y: 140, w: 100, h: 100 };
+let cameraX = 0;
+let keys = {};
+let gameOver = false;
+
+// 監聽按鍵
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// 輔助函式：觸控事件
+function setupBtn(id, key) {
+    const btn = document.getElementById(id);
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
+    btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
+}
+setupBtn('btnLeft', 'ArrowLeft');
+setupBtn('btnRight', 'ArrowRight');
+setupBtn('btnJump', 'ArrowUp');
+document.getElementById('btnAttack').addEventListener('touchstart', (e) => { e.preventDefault(); throwStone(); });
+window.addEventListener('keydown', e => { if(e.code === 'Space') throwStone(); });
+
+function throwStone() {
+    stones.push({ x: player.x + 20, y: player.y + 10, speed: 7 });
+}
+
+function update() {
+    if (gameOver) return;
+
+    // 玩家移動
+    if (keys['ArrowRight']) player.x += player.speed;
+    if (keys['ArrowLeft']) player.x -= player.speed;
+    if (keys['ArrowUp'] && !player.jumping) {
+        player.dy = -12;
+        player.jumping = true;
+    }
+
+    // 重力
+    player.dy += 0.6;
+    player.y += player.dy;
+    if (player.y > player.ground) {
+        player.y = player.ground;
+        player.dy = 0;
+        player.jumping = false;
+    }
+
+    // 鏡頭跟隨
+    cameraX = player.x - 100;
+
+    // 石頭邏輯
+    stones.forEach((s, si) => {
+        s.x += s.speed;
+        enemies.forEach((e, ei) => {
+            if (s.x > e.x && s.x < e.x + e.w && s.y > e.y && s.y < e.y + e.h) {
+                enemies.splice(ei, 1);
+                stones.splice(si, 1);
             }
+        });
+    });
 
-            document.getElementById('user-score').innerText = userScore;
-            document.getElementById('ai-score').innerText = aiScore;
-            
-            // 延遲恢復顏色
-            setTimeout(() => { statusEl.style.color = "white"; }, 1000);
+    // 敵人移動與碰撞
+    enemies.forEach(e => {
+        e.x -= e.speed;
+        if (player.x < e.x + e.w && player.x + player.w > e.x && player.y < e.y + e.h && player.y + player.h > e.y) {
+            alert("被抓到了！重新開始");
+            resetGame();
         }
-    </script>
+    });
+
+    // 勝利條件
+    if (player.x > castle.x) {
+        alert("抵達城堡！恭喜過關！");
+        resetGame();
+    }
+}
+
+function resetGame() {
+    player.x = 50;
+    enemies = [
+        { x: 400, y: 210, w: 30, h: 20, type: 'snake', speed: 2 },
+        { x: 800, y: 190, w: 40, h: 40, type: 'tiger', speed: 3 },
+        { x: 1200, y: 210, w: 30, h: 20, type: 'snake', speed: 2 }
+    ];
+    stones = [];
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(-cameraX, 0);
+
+    // 畫草地
+    ctx.fillStyle = '#2d5a27';
+    ctx.fillRect(0, 240, 2000, 60);
+
+    // 畫玩家 (藍色方塊代替)
+    ctx.fillStyle = '#3498db';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+
+    // 畫敵人
+    enemies.forEach(e => {
+        ctx.fillStyle = e.type === 'snake' ? '#2ecc71' : '#e67e22'; // 蛇綠色，老虎橘色
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+    });
+
+    // 畫石頭
+    ctx.fillStyle = '#95a5a6';
+    stones.forEach(s => ctx.beginPath(), ctx.arc(s.x, s.y, 5, 0, Math.PI*2), ctx.fill());
+    stones.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI*2); ctx.fill(); });
+
+    // 畫城堡
+    ctx.fillStyle = '#7f8c8d';
+    ctx.fillRect(castle.x, castle.y, castle.w, castle.h);
+    ctx.fillStyle = 'black';
+    ctx.fillRect(castle.x + 40, castle.y + 60, 20, 40); // 門
+
+    ctx.restore();
+    
+    update();
+    requestAnimationFrame(draw);
+}
+
+draw();
+</script>
 </body>
 </html>
