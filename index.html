@@ -3,234 +3,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>草薙京：火柴人街頭格鬥</title>
+    <title>火柴人：超級機器人大戰</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; touch-action: none; }
-        canvas { display: block; background: #111; margin: 0 auto; }
-        .ui-layer { position: fixed; top: 15px; left: 15px; pointer-events: none; color: white; text-shadow: 2px 2px #000; z-index: 10; }
-        .hp-bar-bg { width: 200px; height: 15px; background: #333; border: 2px solid #fff; margin-top: 5px; border-radius: 5px; }
-        .hp-bar-fill { width: 100%; height: 100%; background: #ff3e3e; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Consolas', monospace; touch-action: none; }
+        canvas { display: block; background: #050510; margin: 0 auto; }
+        
+        .ui-layer { position: fixed; top: 15px; left: 15px; pointer-events: none; color: #0f0; text-shadow: 0 0 5px #0f0; z-index: 10; }
+        .bar-container { width: 200px; height: 12px; background: #222; border: 1px solid #0f0; margin-top: 5px; border-radius: 3px; }
+        .hp-fill { width: 100%; height: 100%; background: #f00; transition: width 0.2s; }
+        .en-fill { width: 100%; height: 100%; background: #0af; transition: width 0.1s; }
+        
         .controls { position: fixed; bottom: 20px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: auto; z-index: 20; }
-        .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-weight: bold; font-size: 20px; -webkit-tap-highlight-color: transparent; }
+        .btn { width: 65px; height: 65px; background: rgba(0,255,0,0.1); border: 2px solid #0f0; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #0f0; user-select: none; font-weight: bold; }
         .d-pad { display: grid; grid-template-columns: repeat(3, 70px); gap: 5px; }
-        #btnAttack { width: 90px; height: 90px; background: rgba(255, 60, 0, 0.6); border-color: #ffcc00; font-size: 24px; box-shadow: 0 0 15px #f60; }
+        #btnAttack { width: 100px; height: 100px; background: rgba(0,170,255,0.2); border-color: #0af; color: #0af; border-radius: 50%; font-size: 18px; box-shadow: 0 0 15px #0af; }
     </style>
 </head>
 <body>
 
 <div class="ui-layer">
-    <div style="color: #ffcc00; font-size: 20px;">K.O. : <span id="kill-count">0</span></div>
-    <div class="hp-bar-bg"><div id="hp-fill" class="hp-bar-fill"></div></div>
-    <div id="status-text" style="color:#0ff; font-weight:bold;"></div>
+    <div>SYSTEM: ACTIVE</div>
+    <div>KILLS: <span id="kill-count">0</span></div>
+    <div>HP (ARMOR)</div>
+    <div class="bar-container"><div id="hp-fill" class="hp-fill"></div></div>
+    <div>EN (ENERGY)</div>
+    <div class="bar-container"><div id="en-fill" class="en-fill"></div></div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
 <div class="controls">
     <div class="d-pad">
-        <div style="grid-column: 2;" class="btn" id="btnJump">↑</div>
+        <div style="grid-column: 2;" class="btn" id="btnUp">BOOST</div>
         <div style="grid-column: 1; grid-row: 2;" class="btn" id="btnLeft">←</div>
-        <div style="grid-column: 2; grid-row: 2;" class="btn" id="btnDown">↓</div>
+        <div style="grid-column: 2; grid-row: 2;" class="btn" id="btnDown">SHIELD</div>
         <div style="grid-column: 3; grid-row: 2;" class="btn" id="btnRight">→</div>
     </div>
-    <div class="btn" id="btnAttack">拳</div>
+    <div class="btn" id="btnAttack">FIRE</div>
 </div>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = 400;
 
-// 自動調整畫布大小
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = 400;
-}
-window.addEventListener('resize', resize);
-resize();
-
-// 遊戲狀態
 let player = { 
-    x: 100, y: 290, w: 40, h: 60, dy: 0, speed: 5, 
-    hp: 100, jumping: false, crouching: false, ground: 290, 
-    invincible: 0, frame: 0, frameTick: 0, dir: 1, 
-    isAttacking: 0, rapidFire: 0
+    x: 100, y: 280, w: 40, h: 60, dy: 0, speed: 6, 
+    hp: 100, en: 100, ground: 280, 
+    isFlying: false, isShielding: false,
+    dir: 1, bullets: [], charge: 0
 };
 
 let enemies = [];
-let items = [];
 let kills = 0;
 let cameraX = 0;
 let keys = {};
-let spawnTimer = 0;
-let itemSpawnTimer = 0;
 
-// 控制邏輯修正
-const input = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false };
-
-function bindBtn(id, key) {
+// 控制綁定
+function bind(id, key) {
     const el = document.getElementById(id);
-    const start = (e) => { e.preventDefault(); input[key] = true; };
-    const end = (e) => { e.preventDefault(); input[key] = false; };
-    el.addEventListener('touchstart', start);
-    el.addEventListener('touchend', end);
-    el.addEventListener('mousedown', start);
-    el.addEventListener('mouseup', end);
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
+    el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
 }
-bindBtn('btnLeft', 'ArrowLeft');
-bindBtn('btnRight', 'ArrowRight');
-bindBtn('btnJump', 'ArrowUp');
-bindBtn('btnDown', 'ArrowDown');
+bind('btnLeft', 'ArrowLeft'); bind('btnRight', 'ArrowRight');
+bind('btnUp', 'ArrowUp'); bind('btnDown', 'ArrowDown');
 
-const atkBtn = document.getElementById('btnAttack');
-atkBtn.addEventListener('touchstart', (e) => { e.preventDefault(); doAttack(); });
-atkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); doAttack(); });
-window.addEventListener('keydown', e => { if(e.code === 'Space') doAttack(); else input[e.code] = true; });
-window.addEventListener('keyup', e => { if(e.code !== 'Space') input[e.code] = false; });
+const fireBtn = document.getElementById('btnAttack');
+fireBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys['Space'] = true; });
+fireBtn.addEventListener('touchend', (e) => { e.preventDefault(); fireWeapon(); keys['Space'] = false; });
 
-function doAttack() {
-    if (player.isAttacking <= 0) {
-        player.isAttacking = 12; // 攻擊持續12幀
-        enemies.forEach(e => {
-            let dist = Math.abs((player.x + 20) - (e.x + 15));
-            if (dist < 65 && Math.abs(player.y - e.y) < 40) {
-                e.hp -= 40;
-                e.x += player.dir * 30; // 擊退
-            }
-        });
+function fireWeapon() {
+    if (player.charge > 30) {
+        if (player.en >= 30) { // 大砲
+            player.bullets.push({ x: player.x + 20, y: player.y + 10, size: 25, speed: 20 * player.dir, power: 100, type: 'beam' });
+            player.en -= 30;
+        }
+    } else { // 火神砲
+        player.bullets.push({ x: player.x + 20, y: player.y + 15, size: 5, speed: 15 * player.dir, power: 20, type: 'vulcan' });
     }
+    player.charge = 0;
 }
 
 function spawnEnemy() {
-    enemies.push({ 
-        x: cameraX + canvas.width + 100, y: 290, 
-        hp: 100, speed: 1.5 + Math.random() * 2, 
-        frame: 0, frameTick: 0, attackCD: 50 
-    });
-}
-
-function spawnItem() {
-    items.push({ x: cameraX + canvas.width + 100, y: -50, type: Math.random() > 0.5 ? 'HP' : 'S', landed: false });
+    enemies.push({ x: cameraX + canvas.width + 100, y: 280 - Math.random() * 100, hp: 60, speed: 2, type: 'grunt' });
 }
 
 function update() {
-    // 玩家邏輯
-    player.crouching = input.ArrowDown && !player.jumping;
-    if (!player.crouching && player.isAttacking <= 0) {
-        if (input.ArrowRight) { player.x += player.speed; player.dir = 1; }
-        if (input.ArrowLeft && player.x > cameraX) { player.x -= player.speed; player.dir = -1; }
+    // 飛行與能量邏輯
+    if (keys['ArrowUp'] && player.en > 0) {
+        player.dy = -8;
+        player.en -= 0.5;
+        player.isFlying = true;
+    } else {
+        player.isFlying = false;
     }
-    if (input.ArrowUp && !player.jumping && !player.crouching) { player.dy = -15; player.jumping = true; }
+    
+    player.isShielding = keys['ArrowDown'];
+    if (player.en < 100) player.en += 0.2; // 自動恢復
 
-    player.dy += 0.8;
+    if (keys['ArrowRight']) { player.x += player.speed; player.dir = 1; }
+    if (keys['ArrowLeft'] && player.x > cameraX) { player.x -= player.speed; player.dir = -1; }
+    if (keys['Space']) player.charge++;
+
+    player.dy += 0.4; // 重力
     player.y += player.dy;
-    if (player.y > player.ground) { player.y = player.ground; player.dy = 0; player.jumping = false; }
-    if (player.isAttacking > 0) player.isAttacking--;
+    if (player.y > player.ground) { player.y = player.ground; player.dy = 0; }
 
-    cameraX = player.x - 150;
+    cameraX = player.x - 100;
+
+    // 子彈邏輯
+    player.bullets.forEach((b, bi) => {
+        b.x += b.speed;
+        enemies.forEach((e, ei) => {
+            if (b.x > e.x && b.x < e.x + 40 && b.y > e.y && b.y < e.y + 60) {
+                e.hp -= b.power;
+                if (b.type !== 'beam') player.bullets.splice(bi, 1);
+            }
+        });
+        if (Math.abs(b.x - player.x) > 1000) player.bullets.splice(bi, 1);
+    });
 
     // 敵人邏輯
-    enemies.forEach((e, idx) => {
-        let dist = (player.x) - (e.x);
-        if (Math.abs(dist) > 45) {
-            e.x += (dist > 0 ? 1 : -1) * e.speed;
-            e.frameTick++;
-            if (e.frameTick > 10) { e.frame = (e.frame + 1) % 4; e.frameTick = 0; }
-        } else {
-            e.attackCD--;
-            if (e.attackCD <= 0) {
-                if (player.invincible <= 0 && !player.crouching) {
-                    player.hp -= 15;
-                    player.invincible = 40;
-                }
-                e.attackCD = 60 + Math.random() * 40;
-            }
+    enemies.forEach((e, ei) => {
+        e.x -= e.speed;
+        if (Math.abs(e.x - player.x) < 40 && Math.abs(e.y - player.y) < 50) {
+            if (!player.isShielding) player.hp -= 0.5;
+            else player.en -= 0.1;
         }
-        if (e.hp <= 0) { enemies.splice(idx, 1); kills++; document.getElementById('kill-count').innerText = kills; }
+        if (e.hp <= 0) { enemies.splice(ei, 1); kills++; }
     });
 
-    // 物品邏輯
-    items.forEach((it, idx) => {
-        if (!it.landed) { it.y += 4; if (it.y >= 320) it.landed = true; }
-        if (Math.abs(player.x - it.x) < 30 && Math.abs(player.y - it.y) < 50) {
-            if (it.type === 'HP') player.hp = Math.min(100, player.hp + 30);
-            items.splice(idx, 1);
-        }
-    });
+    if (Math.random() < 0.02) spawnEnemy();
 
-    if (++spawnTimer > 100) { spawnEnemy(); spawnTimer = 0; }
-    if (++itemSpawnTimer > 600) { spawnItem(); itemSpawnTimer = 0; }
-    if (player.invincible > 0) player.invincible--;
-    
     document.getElementById('hp-fill').style.width = player.hp + "%";
-    if (player.hp <= 0) { alert("Game Over! K.O.: " + kills); location.reload(); }
+    document.getElementById('en-fill').style.width = player.en + "%";
+    document.getElementById('kill-count').innerText = kills;
+    if (player.hp <= 0) location.reload();
 }
 
-function drawStickman(x, y, color, type, dir, hp = null) {
+function drawRobot(x, y, color, isPlayer, charge = 0) {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.lineWidth = 3;
     ctx.save();
     ctx.translate(x + 20, y + 30);
-    if (dir === -1) ctx.scale(-1, 1);
+    if (!isPlayer) ctx.scale(-1, 1);
+    else if (player.dir === -1) ctx.scale(-1, 1);
 
-    // 頭身體
-    let isCrouch = (type === 'crouch');
-    let headY = isCrouch ? 10 : -25;
-    ctx.beginPath(); ctx.arc(0, headY, 10, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, headY+10); ctx.lineTo(0, isCrouch?25:15); ctx.stroke();
+    // 頭部 (帶天線)
+    ctx.beginPath(); ctx.rect(-10, -30, 20, 15); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(5, -40); ctx.stroke(); 
 
-    // 動作
-    ctx.beginPath();
-    if (type === 'attack') {
-        ctx.moveTo(0, -10); ctx.lineTo(30, -10); // 出拳
-    } else {
-        ctx.moveTo(0, isCrouch?15:-10); ctx.lineTo(15, isCrouch?25:5); 
-        ctx.moveTo(0, isCrouch?15:-10); ctx.lineTo(-15, isCrouch?25:5);
+    // 身體 (機械感)
+    ctx.beginPath(); ctx.rect(-12, -15, 24, 30); ctx.stroke();
+
+    // 噴射背包 (飛行時有火焰)
+    ctx.fillStyle = "#555"; ctx.fillRect(-18, -10, 6, 20);
+    if (isPlayer && player.isFlying) {
+        ctx.fillStyle = "#f80"; ctx.fillRect(-18, 10, 6, 10 + Math.random() * 10);
     }
-    // 腿
-    ctx.moveTo(0, isCrouch?25:15); ctx.lineTo(12, 35);
-    ctx.moveTo(0, isCrouch?25:15); ctx.lineTo(-12, 35);
-    ctx.stroke();
 
-    if (hp !== null) { // 敵人血條
-        ctx.fillStyle = "#333"; ctx.fillRect(-20, -55, 40, 5);
-        ctx.fillStyle = "#f00"; ctx.fillRect(-20, -55, 40 * (hp/100), 5);
+    // 手部 (持槍)
+    ctx.beginPath(); ctx.moveTo(10, -5); ctx.lineTo(25, -5); 
+    ctx.lineTo(25, 0); ctx.stroke();
+
+    // 蓄力特效
+    if (charge > 30) {
+        ctx.fillStyle = "#0af"; ctx.beginPath(); ctx.arc(30, -5, 5 + Math.random()*5, 0, 7); ctx.fill();
     }
+
+    // 腿部
+    ctx.beginPath(); ctx.moveTo(-5, 15); ctx.lineTo(-8, 30); 
+    ctx.moveTo(5, 15); ctx.lineTo(8, 30); ctx.stroke();
+    
     ctx.restore();
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 背景
-    ctx.fillStyle = "#111"; ctx.fillRect(0, 0, canvas.width, 240); // 天空
-    ctx.fillStyle = "#222"; ctx.fillRect(0, 240, canvas.width, 160); // 地面
-    ctx.strokeStyle = "#444"; ctx.beginPath(); ctx.moveTo(0, 240); ctx.lineTo(canvas.width, 240); ctx.stroke(); // 地平線
+    // 背景：星空
+    ctx.fillStyle = "#fff";
+    for(let i=0; i<50; i++) ctx.fillRect((i*137)%canvas.width, (i*243)%400, 1, 1);
 
     ctx.save();
     ctx.translate(-cameraX, 0);
 
-    // 物品
-    items.forEach(it => {
-        ctx.fillStyle = it.type === 'HP' ? "#f00" : "#0af";
-        ctx.fillRect(it.x, it.y, 25, 25);
+    // 地面線
+    ctx.strokeStyle = "#0f0"; ctx.beginPath(); ctx.moveTo(cameraX, 340); ctx.lineTo(cameraX + canvas.width, 340); ctx.stroke();
+
+    // 子彈
+    player.bullets.forEach(b => {
+        ctx.fillStyle = b.type === 'beam' ? "#0af" : "#ff0";
+        ctx.shadowBlur = 15; ctx.shadowColor = ctx.fillStyle;
+        ctx.fillRect(b.x, b.y, b.size * 2, b.size);
+        ctx.shadowBlur = 0;
     });
 
-    // 玩家
-    let pType = player.isAttacking > 0 ? 'attack' : (player.crouching ? 'crouch' : 'idle');
-    if (player.invincible % 10 < 5) drawStickman(player.x, player.y, "#fff", pType, player.dir);
-
-    // 敵人
-    enemies.forEach(e => {
-        let eDir = (player.x > e.x) ? 1 : -1;
-        drawStickman(e.x, e.y, "#f33", 'idle', eDir, e.hp);
-    });
+    // 機器人繪製
+    drawRobot(player.x, player.y, "#fff", true, player.charge);
+    enemies.forEach(e => drawRobot(e.x, e.y, "#f33", false));
 
     ctx.restore();
     update();
     requestAnimationFrame(draw);
 }
-
-// 啟動遊戲
 draw();
 </script>
 </body>
