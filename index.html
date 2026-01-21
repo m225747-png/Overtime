@@ -3,27 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>草薙京：火柴人軍團突圍</title>
+    <title>草薙京：街頭火柴人格鬥</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
-        canvas { display: block; background: #111; margin: 0 auto; }
+        canvas { display: block; background: #1a1a1a; margin: 0 auto; }
         .ui-layer { position: fixed; top: 15px; left: 15px; pointer-events: none; color: white; text-shadow: 2px 2px #000; z-index: 10; }
-        .hp-bar-bg { width: 220px; height: 18px; background: #333; border: 2px solid #fff; margin-top: 5px; border-radius: 9px; overflow: hidden; }
-        .hp-bar-fill { width: 100%; height: 100%; background: linear-gradient(to right, #ff416c, #ff4b2b); transition: width 0.3s; }
+        .hp-bar-bg { width: 200px; height: 15px; background: #333; border: 2px solid #fff; margin-top: 5px; border-radius: 5px; }
+        .hp-bar-fill { width: 100%; height: 100%; background: #ff3e3e; transition: width 0.2s; }
         .controls { position: fixed; bottom: 20px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: auto; z-index: 10; }
-        .btn { width: 60px; height: 60px; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.8); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-weight: bold; -webkit-tap-highlight-color: transparent; }
-        .d-pad { display: grid; grid-template-columns: repeat(3, 65px); gap: 10px; }
-        #btnAttack { width: 80px; height: 80px; background: rgba(211, 84, 0, 0.7); border-color: #ff9d00; position: relative; overflow: hidden; font-size: 18px; }
-        #cd-overlay { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: rgba(0,0,0,0.5); }
-        .status-msg { color: #00ffff; font-weight: bold; margin-top: 5px; height: 20px; }
+        .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-weight: bold; }
+        .d-pad { display: grid; grid-template-columns: repeat(3, 70px); gap: 5px; }
+        #btnAttack { width: 90px; height: 90px; background: rgba(255, 60, 0, 0.6); border-color: #ffcc00; font-size: 20px; }
     </style>
 </head>
 <body>
 
 <div class="ui-layer">
-    <div style="color: #ffcc00; font-size: 22px; font-weight: bold;">K.O. : <span id="kill-count">0</span></div>
+    <div style="color: #ffcc00; font-size: 20px;">K.O. : <span id="kill-count">0</span></div>
     <div class="hp-bar-bg"><div id="hp-fill" class="hp-bar-fill"></div></div>
-    <div id="status-text" class="status-msg"></div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -35,7 +32,7 @@
         <div style="grid-column: 2; grid-row: 2;" class="btn" id="btnDown">↓</div>
         <div style="grid-column: 3; grid-row: 2;" class="btn" id="btnRight">→</div>
     </div>
-    <div class="btn" id="btnAttack">大蛇薙<div id="cd-overlay"></div></div>
+    <div class="btn" id="btnAttack">打擊</div>
 </div>
 
 <script>
@@ -44,22 +41,19 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = 400;
 
-// 遊戲狀態
 let player = { 
-    x: 100, y: 300, w: 30, h: 60, dy: 0, speed: 5, 
+    x: 100, y: 300, w: 40, h: 60, dy: 0, speed: 4, 
     hp: 100, jumping: false, crouching: false, ground: 290, 
-    invincible: 0, frame: 0, frameTick: 0, dir: 1, moving: false,
-    rapidFire: 0 
+    invincible: 0, frame: 0, frameTick: 0, dir: 1, 
+    isAttacking: 0 // 攻擊動畫計時
 };
-let flames = []; 
+
 let enemies = [];
-let items = []; 
+let items = [];
 let kills = 0;
 let cameraX = 0;
 let keys = {};
-let attackCD = 0;
 let spawnTimer = 0;
-let itemSpawnTimer = 0;
 
 // 控制
 window.addEventListener('keydown', e => keys[e.code] = true);
@@ -72,197 +66,125 @@ function setupBtn(id, key) {
 }
 setupBtn('btnLeft', 'ArrowLeft'); setupBtn('btnRight', 'ArrowRight');
 setupBtn('btnJump', 'ArrowUp'); setupBtn('btnDown', 'ArrowDown');
-document.getElementById('btnAttack').addEventListener('touchstart', (e) => { e.preventDefault(); handleAttack(); });
-window.addEventListener('keydown', e => { if(e.code === 'Space') handleAttack(); });
+document.getElementById('btnAttack').addEventListener('touchstart', (e) => { e.preventDefault(); doAttack(); });
+window.addEventListener('keydown', e => { if(e.code === 'Space') doAttack(); });
 
-function handleAttack() {
-    if (attackCD <= 0) {
-        flames.push({ 
-            x: player.x + (player.dir === 1 ? 20 : -60), 
-            y: player.crouching ? player.y + 25 : player.y + 15, 
-            w: 60, h: 25, speed: 15 * player.dir, dir: player.dir 
+function doAttack() {
+    if (player.isAttacking <= 0) {
+        player.isAttacking = 15; // 攻擊持續15幀
+        // 攻擊判定
+        enemies.forEach(e => {
+            let dist = Math.abs((player.x + 20) - (e.x + 15));
+            if (dist < 60 && Math.abs(player.y - e.y) < 30) {
+                e.hp -= 35;
+                e.x += player.dir * 20; // 擊退效果
+            }
         });
-        attackCD = (player.rapidFire > 0) ? 8 : 100;
     }
 }
 
-function spawnItem() {
-    items.push({
-        x: cameraX + Math.random() * canvas.width + 400,
-        y: -50,
-        type: Math.random() > 0.5 ? 'HP' : 'SPEED',
-        landed: false
+function spawnEnemy() {
+    enemies.push({ 
+        x: cameraX + canvas.width + 50, y: 290, 
+        hp: 100, speed: 1.5 + Math.random(), 
+        frame: 0, frameTick: 0, attackCD: 60 
     });
 }
 
 function update() {
-    player.moving = false;
+    // 玩家移動
     player.crouching = keys['ArrowDown'] && !player.jumping;
-
-    if (!player.crouching) {
-        if (keys['ArrowRight']) { player.x += player.speed; player.dir = 1; player.moving = true; }
-        if (keys['ArrowLeft'] && player.x > cameraX) { player.x -= player.speed; player.dir = -1; player.moving = true; }
+    if (!player.crouching && player.isAttacking <= 0) {
+        if (keys['ArrowRight']) { player.x += player.speed; player.dir = 1; }
+        if (keys['ArrowLeft'] && player.x > cameraX) { player.x -= player.speed; player.dir = -1; }
     }
-    if (keys['ArrowUp'] && !player.jumping && !player.crouching) { player.dy = -15; player.jumping = true; }
+    if (keys['ArrowUp'] && !player.jumping) { player.dy = -14; player.jumping = true; }
 
     player.dy += 0.8;
     player.y += player.dy;
     if (player.y > player.ground) { player.y = player.ground; player.dy = 0; player.jumping = false; }
+    if (player.isAttacking > 0) player.isAttacking--;
 
     cameraX = player.x - 150;
 
-    if (player.moving && !player.jumping) {
-        player.frameTick++;
-        if (player.frameTick > 6) { player.frame = (player.frame + 1) % 4; player.frameTick = 0; }
-    }
-
-    if (attackCD > 0) attackCD -= 2.5;
-    document.getElementById('cd-overlay').style.height = attackCD + "%";
-    if (player.rapidFire > 0) player.rapidFire--;
-
-    // 火焰邏輯
-    flames.forEach((f, fi) => {
-        f.x += f.speed;
-        enemies.forEach((e, ei) => {
-            if (f.x < e.x + 30 && f.x + f.w > e.x && f.y < e.y + 60 && f.y + f.h > e.y) {
-                enemies.splice(ei, 1);
-                kills++; document.getElementById('kill-count').innerText = kills;
+    // 敵人 AI
+    enemies.forEach((e, idx) => {
+        let dist = (player.x) - (e.x);
+        // 靠近玩家
+        if (Math.abs(dist) > 40) {
+            e.x += (dist > 0 ? 1 : -1) * e.speed;
+            e.frameTick++;
+            if (e.frameTick > 10) { e.frame = (e.frame + 1) % 4; e.frameTick = 0; }
+        } else {
+            // 隨機攻擊
+            e.attackCD--;
+            if (e.attackCD <= 0) {
+                if (player.invincible <= 0 && !player.crouching) {
+                    player.hp -= 15;
+                    player.invincible = 40;
+                }
+                e.attackCD = 80 + Math.random() * 40;
             }
-        });
-        if (Math.abs(f.x - player.x) > 1000) flames.splice(fi, 1);
+        }
+        if (e.hp <= 0) { enemies.splice(idx, 1); kills++; document.getElementById('kill-count').innerText = kills; }
     });
 
-    // 物品停留原地邏輯
-    items.forEach((it, idx) => {
-        if (!it.landed) {
-            it.y += 3; // 降落速度
-            if (it.y >= 320) { it.y = 320; it.landed = true; } // 落地位置
-        }
-        if (player.x < it.x + 30 && player.x + 30 > it.x && player.y < it.y + 30 && player.y + 60 > it.y) {
-            if (it.type === 'HP') player.hp = Math.min(100, player.hp + 30);
-            else player.rapidFire = 300;
-            items.splice(idx, 1);
-        }
-    });
-
-    // 怪物生成 (紅色火柴人)
-    if (++spawnTimer > Math.max(20, 60 - Math.floor(kills/10))) {
-        enemies.push({ 
-            x: cameraX + canvas.width + 100, 
-            y: 290, 
-            speed: 2 + Math.random() * 3,
-            frame: 0, frameTick: 0
-        });
-        spawnTimer = 0;
-    }
-    if (++itemSpawnTimer > 500) { spawnItem(); itemSpawnTimer = 0; }
-
-    // 傷害判定
+    if (++spawnTimer > 120) { spawnEnemy(); spawnTimer = 0; }
     if (player.invincible > 0) player.invincible--;
-    enemies.forEach((e) => {
-        e.x -= e.speed;
-        e.frameTick++;
-        if (e.frameTick > 8) { e.frame = (e.frame + 1) % 4; e.frameTick = 0; }
-
-        let pHitY = player.y + (player.crouching ? 30 : 0);
-        if (player.x < e.x + 20 && player.x + 20 > e.x && pHitY < e.y + 60 && pHitY + 60 > e.y) {
-            if (player.invincible <= 0) {
-                player.hp -= 20; player.invincible = 50;
-                if (player.hp <= 0) { alert("戰鬥失敗！K.O.數: " + kills); location.reload(); }
-            }
-        }
-    });
-
-    document.getElementById('status-text').innerText = player.rapidFire > 0 ? "連發模式開啟！" : "";
     document.getElementById('hp-fill').style.width = player.hp + "%";
+    if (player.hp <= 0) { alert("你被擊倒了！K.O.數: " + kills); location.reload(); }
 }
 
-function drawStickman(x, y, color, frame, isJumping, isCrouching, dir) {
+function drawStickman(x, y, color, type, dir, hp = null) {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.lineWidth = 4;
     ctx.save();
-    ctx.translate(x + 15, y + 30);
+    ctx.translate(x + 20, y + 30);
     if (dir === -1) ctx.scale(-1, 1);
 
-    let headY = isCrouching ? 5 : -25;
-    let bodyYStart = isCrouching ? 10 : -15;
-    let bodyYEnd = isCrouching ? 20 : 15;
-
     // 頭與身體
-    ctx.beginPath(); ctx.arc(0, headY, 10, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, bodyYStart); ctx.lineTo(0, bodyYEnd); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -25, 10, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, 15); ctx.stroke();
 
-    // 手腳動畫
+    // 手腳 (動作切換)
     ctx.beginPath();
-    if (isCrouching) {
-        ctx.moveTo(0, 15); ctx.lineTo(15, 25); ctx.moveTo(0, 15); ctx.lineTo(-15, 25);
-        ctx.moveTo(0, 20); ctx.lineTo(15, 35); ctx.moveTo(0, 20); ctx.lineTo(-15, 35);
+    if (type === 'attack') {
+        ctx.moveTo(0, -10); ctx.lineTo(25, -10); // 出拳
+        ctx.moveTo(0, 15); ctx.lineTo(10, 30); ctx.moveTo(0, 15); ctx.lineTo(-10, 30);
     } else {
-        let angle = isJumping ? 4 : frame;
-        if (angle === 0) {
-            ctx.moveTo(0, -10); ctx.lineTo(12, 5); ctx.moveTo(0, -10); ctx.lineTo(-12, 5);
-            ctx.moveTo(0, 15); ctx.lineTo(10, 30); ctx.moveTo(0, 15); ctx.lineTo(-10, 30);
-        } else if (angle === 1 || angle === 3) {
-            let offset = (angle === 1) ? 15 : -15;
-            ctx.moveTo(0, -10); ctx.lineTo(offset, 5); ctx.moveTo(0, -10); ctx.lineTo(-offset, 5);
-            ctx.moveTo(0, 15); ctx.lineTo(offset, 35); ctx.moveTo(0, 15); ctx.lineTo(-offset, 35);
-        } else if (angle === 4) {
-            ctx.moveTo(0, -10); ctx.lineTo(15, -10); ctx.moveTo(0, -10); ctx.lineTo(-15, -10);
-            ctx.moveTo(0, 15); ctx.lineTo(12, 10); ctx.moveTo(0, 15); ctx.lineTo(-12, 10);
-        } else {
-            ctx.moveTo(0, -10); ctx.lineTo(5, 12); ctx.moveTo(0, -10); ctx.lineTo(-5, 12);
-            ctx.moveTo(0, 15); ctx.lineTo(5, 30); ctx.moveTo(0, 15); ctx.lineTo(-5, 30);
-        }
+        ctx.moveTo(0, -10); ctx.lineTo(10, 5); ctx.moveTo(0, -10); ctx.lineTo(-10, 5);
+        ctx.moveTo(0, 15); ctx.lineTo(10, 30); ctx.moveTo(0, 15); ctx.lineTo(-10, 30);
     }
     ctx.stroke();
+
+    // 敵人血條
+    if (hp !== null) {
+        ctx.fillStyle = "red"; ctx.fillRect(-20, -50, 40 * (hp/100), 5);
+    }
     ctx.restore();
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    
-    // 背景層
-    ctx.fillStyle = '#0a0a1a'; ctx.fillRect(0, 0, canvas.width, canvas.height); // 天空
-    ctx.fillStyle = '#1a1a2e'; // 遠山
-    let mX = -cameraX * 0.2 % canvas.width;
-    for(let i=0; i<2; i++) {
-        ctx.beginPath(); ctx.moveTo(mX + i*canvas.width, 240); ctx.lineTo(mX + 150 + i*canvas.width, 140);
-        ctx.lineTo(mX + 300 + i*canvas.width, 240); ctx.fill();
-    }
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 240, canvas.width, 2); // 地平線
+    // 背景
+    ctx.fillStyle = "#222"; ctx.fillRect(0, 240, canvas.width, 160); // 路面
+    ctx.strokeStyle = "#444"; ctx.beginPath(); ctx.moveTo(0, 240); ctx.lineTo(canvas.width, 240); ctx.stroke(); // 地平線
 
+    ctx.save();
     ctx.translate(-cameraX, 0);
 
-    // 落地物資
-    items.forEach(it => {
-        ctx.shadowBlur = 10; ctx.shadowColor = it.type==='HP'?'red':'cyan';
-        ctx.fillStyle = it.type==='HP' ? '#f00' : '#0af';
-        ctx.fillRect(it.x, it.y, 30, 30);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#fff'; ctx.font = "bold 16px Arial"; ctx.fillText(it.type==='HP'?"H":"S", it.x+8, it.y+22);
-    });
-
-    // 大蛇薙火焰
-    flames.forEach(f => {
-        ctx.fillStyle = '#ff0'; ctx.shadowBlur = 20; ctx.shadowColor = '#f60';
-        ctx.fillRect(f.dir === 1 ? f.x : f.x - f.w, f.y, f.w, f.h);
-        ctx.shadowBlur = 0;
-    });
-
-    // 主角
+    // 畫玩家
+    let pStatus = player.isAttacking > 0 ? 'attack' : 'idle';
     if (player.invincible % 10 < 5) {
-        let pColor = player.rapidFire > 0 ? '#0ff' : '#fff';
-        drawStickman(player.x, player.y, pColor, player.frame, player.jumping, player.crouching, player.dir);
+        drawStickman(player.x, player.y, "#fff", pStatus, player.dir);
     }
 
-    // 怪物 (紅色火柴人)
+    // 畫敵人
     enemies.forEach(e => {
-        drawStickman(e.x, e.y, '#f33', e.frame, false, false, -1);
+        let eDir = (player.x > e.x) ? 1 : -1;
+        drawStickman(e.x, e.y, "#f33", 'idle', eDir, e.hp);
     });
 
-    // 近景地面
-    ctx.fillStyle = '#051405'; ctx.fillRect(cameraX, 350, canvas.width, 50);
     ctx.restore();
     update();
     requestAnimationFrame(draw);
