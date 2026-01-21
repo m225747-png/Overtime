@@ -3,16 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>森林大冒險</title>
+    <title>森林大冒險 - 進階版</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: Arial, sans-serif; }
-        canvas { display: block; background: #4a7d4a; margin: 0 auto; }
-        .controls { position: fixed; bottom: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; pointer-events: none; }
-        .btn { width: 60px; height: 60px; background: rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-weight: bold; }
-        .d-pad { display: flex; gap: 10px; }
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Arial', sans-serif; }
+        canvas { display: block; background: linear-gradient(#87CEEB, #4a7d4a); margin: 0 auto; }
+        .ui-layer { position: fixed; top: 10px; left: 10px; pointer-events: none; color: white; }
+        .hp-bar-bg { width: 200px; height: 20px; background: #555; border: 2px solid #fff; }
+        .hp-bar-fill { width: 100%; height: 100%; background: #ff3e3e; transition: width 0.2s; }
+        .controls { position: fixed; bottom: 20px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: none; }
+        .btn { width: 65px; height: 65px; background: rgba(0,0,0,0.5); border: 2px solid #fff; border-radius: 50%; pointer-events: auto; display: flex; align-items: center; justify-content: center; color: white; user-select: none; font-size: 14px; }
+        .d-pad { display: flex; gap: 15px; }
+        #btnAttack { background: #e67e22; position: relative; overflow: hidden; }
+        #cd-overlay { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: rgba(0,0,0,0.6); }
     </style>
 </head>
 <body>
+
+<div class="ui-layer">
+    <div>HP</div>
+    <div class="hp-bar-bg"><div id="hp-fill" class="hp-bar-fill"></div></div>
+</div>
 
 <canvas id="gameCanvas"></canvas>
 
@@ -20,36 +30,42 @@
     <div class="d-pad">
         <div class="btn" id="btnLeft">←</div>
         <div class="btn" id="btnRight">→</div>
-        <div class="btn" id="btnJump">↑</div>
+        <div class="btn" id="btnJump">跳躍</div>
     </div>
-    <div class="btn" id="btnAttack">投石</div>
+    <div class="btn" id="btnAttack">
+        投石
+        <div id="cd-overlay"></div>
+    </div>
 </div>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-
-// 自動調整畫布大小
 canvas.width = window.innerWidth;
-canvas.height = 300; 
+canvas.height = 350;
 
-// 遊戲狀態
-let player = { x: 50, y: 200, w: 30, h: 40, dy: 0, speed: 4, jumping: false, ground: 200 };
+// 遊戲參數
+let player = { 
+    x: 50, y: 200, w: 30, h: 45, dy: 0, speed: 5, 
+    hp: 100, jumping: false, ground: 250, 
+    invincible: 0 // 無敵時間計數
+};
 let stones = [];
 let enemies = [
-    { x: 400, y: 210, w: 30, h: 20, type: 'snake', speed: 2 },
-    { x: 800, y: 190, w: 40, h: 40, type: 'tiger', speed: 3 }
+    { x: 500, y: 260, w: 40, h: 20, type: 'snake', speed: 2 },
+    { x: 900, y: 240, w: 50, h: 40, type: 'tiger', speed: 3.5 },
+    { x: 1300, y: 260, w: 40, h: 20, type: 'snake', speed: 2.5 }
 ];
-let castle = { x: 1500, y: 140, w: 100, h: 100 };
+let castle = { x: 1800, y: 150, w: 120, h: 130 };
 let cameraX = 0;
 let keys = {};
-let gameOver = false;
+let attackCD = 0; // 冷卻時間 (0-100)
+const CD_SPEED = 2; // 冷卻恢復速度
 
-// 監聽按鍵
+// 觸控與按鍵邏輯
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
-// 輔助函式：觸控事件
 function setupBtn(id, key) {
     const btn = document.getElementById(id);
     btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
@@ -58,26 +74,45 @@ function setupBtn(id, key) {
 setupBtn('btnLeft', 'ArrowLeft');
 setupBtn('btnRight', 'ArrowRight');
 setupBtn('btnJump', 'ArrowUp');
-document.getElementById('btnAttack').addEventListener('touchstart', (e) => { e.preventDefault(); throwStone(); });
-window.addEventListener('keydown', e => { if(e.code === 'Space') throwStone(); });
 
-function throwStone() {
-    stones.push({ x: player.x + 20, y: player.y + 10, speed: 7 });
+document.getElementById('btnAttack').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    handleAttack();
+});
+
+window.addEventListener('keydown', e => { if(e.code === 'Space') handleAttack(); });
+
+function handleAttack() {
+    if (attackCD <= 0) {
+        stones.push({ x: player.x + 20, y: player.y + 15, speed: 8 });
+        attackCD = 100; // 進入冷卻
+    }
+}
+
+function resetGame() {
+    player.hp = 100;
+    player.x = 50;
+    player.invincible = 0;
+    attackCD = 0;
+    enemies = [
+        { x: 500, y: 260, w: 40, h: 20, type: 'snake', speed: 2 },
+        { x: 900, y: 240, w: 50, h: 40, type: 'tiger', speed: 3.5 },
+        { x: 1400, y: 260, w: 40, h: 20, type: 'snake', speed: 2.5 }
+    ];
+    stones = [];
 }
 
 function update() {
-    if (gameOver) return;
-
     // 玩家移動
     if (keys['ArrowRight']) player.x += player.speed;
     if (keys['ArrowLeft']) player.x -= player.speed;
     if (keys['ArrowUp'] && !player.jumping) {
-        player.dy = -12;
+        player.dy = -13;
         player.jumping = true;
     }
 
     // 重力
-    player.dy += 0.6;
+    player.dy += 0.7;
     player.y += player.dy;
     if (player.y > player.ground) {
         player.y = player.ground;
@@ -85,10 +120,14 @@ function update() {
         player.jumping = false;
     }
 
-    // 鏡頭跟隨
+    // 鏡頭
     cameraX = player.x - 100;
 
-    // 石頭邏輯
+    // 石頭與冷卻
+    if (attackCD > 0) {
+        attackCD -= CD_SPEED;
+        document.getElementById('cd-overlay').style.height = attackCD + "%";
+    }
     stones.forEach((s, si) => {
         s.x += s.speed;
         enemies.forEach((e, ei) => {
@@ -97,32 +136,33 @@ function update() {
                 stones.splice(si, 1);
             }
         });
+        if(s.x > player.x + 600) stones.splice(si, 1); // 射程限制
     });
 
-    // 敵人移動與碰撞
+    // 敵人與傷害
+    if (player.invincible > 0) player.invincible--;
     enemies.forEach(e => {
         e.x -= e.speed;
         if (player.x < e.x + e.w && player.x + player.w > e.x && player.y < e.y + e.h && player.y + player.h > e.y) {
-            alert("被抓到了！重新開始");
-            resetGame();
+            if (player.invincible <= 0) {
+                player.hp -= 25;
+                player.invincible = 60; // 約1秒無敵
+                if (player.hp <= 0) {
+                    alert("你倒下了！");
+                    resetGame();
+                }
+            }
         }
     });
 
-    // 勝利條件
+    // 更新 UI
+    document.getElementById('hp-fill').style.width = player.hp + "%";
+
+    // 勝利
     if (player.x > castle.x) {
-        alert("抵達城堡！恭喜過關！");
+        alert("抵達城堡！草薙京挑戰成功！");
         resetGame();
     }
-}
-
-function resetGame() {
-    player.x = 50;
-    enemies = [
-        { x: 400, y: 210, w: 30, h: 20, type: 'snake', speed: 2 },
-        { x: 800, y: 190, w: 40, h: 40, type: 'tiger', speed: 3 },
-        { x: 1200, y: 210, w: 30, h: 20, type: 'snake', speed: 2 }
-    ];
-    stones = [];
 }
 
 function draw() {
@@ -130,33 +170,37 @@ function draw() {
     ctx.save();
     ctx.translate(-cameraX, 0);
 
-    // 畫草地
+    // 草地與裝飾
     ctx.fillStyle = '#2d5a27';
-    ctx.fillRect(0, 240, 2000, 60);
+    ctx.fillRect(cameraX, 290, canvas.width, 60);
 
-    // 畫玩家 (藍色方塊代替)
-    ctx.fillStyle = '#3498db';
-    ctx.fillRect(player.x, player.y, player.w, player.h);
+    // 主角 (受傷閃爍)
+    if (player.invincible % 10 < 5) {
+        ctx.fillStyle = '#f1c40f'; // 草薙京代表色
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+    }
 
-    // 畫敵人
+    // 敵人
     enemies.forEach(e => {
-        ctx.fillStyle = e.type === 'snake' ? '#2ecc71' : '#e67e22'; // 蛇綠色，老虎橘色
+        ctx.fillStyle = e.type === 'snake' ? '#27ae60' : '#d35400';
         ctx.fillRect(e.x, e.y, e.w, e.h);
     });
 
-    // 畫石頭
-    ctx.fillStyle = '#95a5a6';
-    stones.forEach(s => ctx.beginPath(), ctx.arc(s.x, s.y, 5, 0, Math.PI*2), ctx.fill());
-    stones.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI*2); ctx.fill(); });
+    // 石頭 (帶點火光色)
+    ctx.fillStyle = '#ff6600';
+    stones.forEach(s => {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 6, 0, Math.PI*2);
+        ctx.fill();
+    });
 
-    // 畫城堡
-    ctx.fillStyle = '#7f8c8d';
+    // 城堡
+    ctx.fillStyle = '#34495e';
     ctx.fillRect(castle.x, castle.y, castle.w, castle.h);
-    ctx.fillStyle = 'black';
-    ctx.fillRect(castle.x + 40, castle.y + 60, 20, 40); // 門
+    ctx.fillStyle = '#000';
+    ctx.fillRect(castle.x + 50, castle.y + 80, 25, 50);
 
     ctx.restore();
-    
     update();
     requestAnimationFrame(draw);
 }
